@@ -1,0 +1,70 @@
+// Вершинний шейдер
+const vertexShaderSource = `
+attribute vec3 vertex;    // Вершина об'єкта
+attribute vec3 normal;    // Нормаль до поверхні
+
+uniform mat4 ModelViewProjectionMatrix; // Матрична трансформація для переходу до простору кліпу
+uniform mat4 ModelViewMatrix;           // Матрична трансформація для простору моделі
+
+varying vec3 vNormal;    // Передача нормалей у фрагментний шейдер
+varying vec3 vPosition;  // Передача позицій вершин у фрагментний шейдер
+
+void main() {
+    // Перетворення нормалі у простір моделі (дозволяє врахувати трансформації)
+    vNormal = mat3(ModelViewMatrix) * normal;
+
+    // Обчислення позиції вершини у просторі моделі
+    vPosition = (ModelViewMatrix * vec4(vertex, 1.0)).xyz;
+
+    // Перетворення вершини у простір кліпу для малювання
+    gl_Position = ModelViewProjectionMatrix * vec4(vertex, 1.0);  
+}
+`;
+
+// Фрагментний шейдер
+const fragmentShaderSource = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
+   precision highp float; // Висока точність для фрагментів
+#else
+   precision mediump float; // Середня точність, якщо немає високої
+#endif
+
+uniform vec4 color;            // Колір поверхні
+uniform vec3 lightPosition;    // Позиція джерела світла
+uniform vec3 viewPosition;     // Позиція спостерігача
+uniform float ambientStrength; // Сила ambient освітлення
+uniform float specularStrength; // Сила спекулярного освітлення
+uniform float shininess;       // Шорсткість поверхні
+
+varying vec3 vNormal;          // Інтерпольовані нормалі з вершини
+varying vec3 vPosition;        // Інтерпольовані позиції вершин
+
+void main() {
+    // Нормалізація вектора нормалі
+    vec3 normal = normalize(vNormal);
+
+    // Обчислення вектора до джерела світла
+    vec3 lightDir = normalize(lightPosition - vPosition);
+
+    // Обчислення вектора до спостерігача (камери)
+    vec3 viewDir = normalize(viewPosition - vPosition);
+
+    // Обчислення ambient освітлення (освітлення без напрямку)
+    vec3 ambient = ambientStrength * color.rgb;
+
+    // Обчислення дифузного освітлення (Lambertian reflection)
+    float diff = max(dot(normal, lightDir), 0.0);  // Використовуємо косинус кута між нормаллю та напрямком на світло
+    vec3 diffuse = diff * color.rgb; // Множимо результат на колір для отримання світлого ефекту
+
+    // Спекулярне освітлення (модель Фонга)
+    vec3 reflectDir = reflect(-lightDir, normal); // Обчислення напрямку відбиття світла
+    float spec = pow(max(dot(viewDir, reflectDir), 0.0), shininess);  // Розрахунок сили спекулярного освітлення
+    vec3 specular = specularStrength * spec * vec3(1.0); // Множимо на силу спекулярного освітлення
+
+    // Підсумковий колір, який є сумою ambient, diffuse та specular освітлення
+    vec3 finalColor = ambient + diffuse + specular;
+
+    // Встановлюємо фінальний колір пікселя з альфа-каналом (прозорість)
+    gl_FragColor = vec4(finalColor, color.a);
+}
+`;
