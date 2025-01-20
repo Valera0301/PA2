@@ -101,7 +101,7 @@ function draw() {
     // Параметрів освітлення
     const ambientStrength = 0.1; // Сила ambient освітлення
     const specularStrength = 0.5; // Сила спекулярного освітлення
-    const shininess = 30.0; // Жорсткість поверхні
+    const shininess = 10.0; // Жорсткість поверхні
 
     // Позиція спостерігача (камери)
     const viewPosition = [0.0, 0.0, 30.0]; // Камера знаходиться за об'єктом
@@ -132,26 +132,7 @@ function updateLightPosition(time) {
     return [x, y, z];
 }
 
-// Функція для розрахунку нормалей
-function calculateNormal(u, v) {
-    const du = [1, 0, -Math.sin(u)];
-    const dv = [0, 1, -Math.sin(v)];
-    
-    // Векторний добуток для нормалі
-    const normal = [
-        du[1] * dv[2] - du[2] * dv[1],  // x
-        du[2] * dv[0] - du[0] * dv[2],  // y
-        du[0] * dv[1] - du[1] * dv[0]   // z
-    ];
 
-    // Нормалізація вектора нормалі
-    const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
-    normal[0] /= length;
-    normal[1] /= length;
-    normal[2] /= length;
-
-    return normal;
-}
 
 // Функція для генерації точки на поверхні
 function calculateSurfacePoint(u, v) {
@@ -170,7 +151,7 @@ function calculateSurfacePoint(u, v) {
     return { x: u, y: v, z: z};
 }
 
-// Функція для генерації повної сфери з flat shading
+// Функція для генерації повної сфери
 function createFullSurface(uSteps, vSteps) {
     const surface = {
         vertexList: [],
@@ -183,19 +164,17 @@ function createFullSurface(uSteps, vSteps) {
     const uStep = (uMax - uMin) / uSteps;
     const vStep = (vMax - vMin) / vSteps;
 
-    // Масив для збереження індексів вершин
-    const vertexMap = [];
+    const vertexMap = []; // Масив для збереження індексів вершин
 
+    // Генерація вершин
     for (let i = 0; i <= vSteps; i++) {
         vertexMap[i] = [];
         for (let j = 0; j <= uSteps; j++) {
             const u = uMin + j * uStep;
             const v = vMin + i * vStep;
 
-            // Обчислюємо вершину
+            // Обчислення координат вершини
             const p = calculateSurfacePoint(u, v);
-
-            // Додаємо вершину до списку
             surface.vertexList.push(p.x, p.y, p.z);
 
             // Зберігаємо індекс вершини
@@ -203,7 +182,7 @@ function createFullSurface(uSteps, vSteps) {
         }
     }
 
-    // Генерація трикутників
+    // Генерація індексів трикутників
     for (let i = 0; i < vSteps; i++) {
         for (let j = 0; j < uSteps; j++) {
             const idx1 = vertexMap[i][j];
@@ -211,20 +190,12 @@ function createFullSurface(uSteps, vSteps) {
             const idx3 = vertexMap[i + 1][j];
             const idx4 = vertexMap[i + 1][j + 1];
 
-            // Перший трикутник
-            surface.indexList.push(idx1, idx2, idx3);
-
-            // Другий трикутник
-            surface.indexList.push(idx2, idx4, idx3);
+            surface.indexList.push(idx1, idx2, idx3); // Перший трикутник
+            surface.indexList.push(idx2, idx4, idx3); // Другий трикутник
         }
     }
 
-    // Обчислення нормалей для всіх вершин
-    const vertexCount = surface.vertexList.length / 3;
-    for (let i = 0; i < vertexCount; i++) {
-        surface.normalList.push(0, 0, 0); // Ініціалізація нормалей
-    }
-
+    // Flat shading: Обчислення нормалей
     for (let t = 0; t < surface.indexList.length; t += 3) {
         const idx1 = surface.indexList[t];
         const idx2 = surface.indexList[t + 1];
@@ -234,55 +205,47 @@ function createFullSurface(uSteps, vSteps) {
         const v2 = surface.vertexList.slice(idx2 * 3, idx2 * 3 + 3);
         const v3 = surface.vertexList.slice(idx3 * 3, idx3 * 3 + 3);
 
-        // Обчислення нормалі трикутника
-        const normal = calculateNormal(
-            v1[0], v1[1], v1[2],
-            v2[0], v2[1], v2[2],
-            v3[0], v3[1], v3[2]
-        );
+        // Обчислення нормалі для трикутника
+        const normal = calculateNormalForTriangle(v1, v2, v3);
 
-        // Додаємо нормаль до кожної вершини трикутника
-        for (const idx of [idx1, idx2, idx3]) {
-            surface.normalList[idx * 3] += normal[0];
-            surface.normalList[idx * 3 + 1] += normal[1];
-            surface.normalList[idx * 3 + 2] += normal[2];
-        }
-    }
-
-    // Нормалізація нормалей
-    for (let i = 0; i < surface.normalList.length; i += 3) {
-        const nx = surface.normalList[i];
-        const ny = surface.normalList[i + 1];
-        const nz = surface.normalList[i + 2];
-        const length = Math.sqrt(nx * nx + ny * ny + nz * nz);
-
-        surface.normalList[i] /= length;
-        surface.normalList[i + 1] /= length;
-        surface.normalList[i + 2] /= length;
+        // Додаємо нормаль для кожної вершини трикутника
+        surface.normalList.push(...normal, ...normal, ...normal);
     }
 
     return surface;
 }
 
-
-
-// Функція для обчислення нормалі трикутника на основі координат його вершин
-function calculateNormal(x1, y1, z1, x2, y2, z2, x3, y3, z3) {
-    const v1 = [x2 - x1, y2 - y1, z2 - z1];
-    const v2 = [x3 - x1, y3 - y1, z3 - z1];
+// Функція для розрахунку нормалей через похідні
+function calculateNormal(u, v) {
+    const du = [1, 0, -4 * Math.PI * Math.sin(2 * Math.PI * u) * Math.cos(2 * Math.PI * v)];
+    const dv = [0, 1, -4 * Math.PI * Math.cos(2 * Math.PI * u) * Math.sin(2 * Math.PI * v)];
 
     // Векторний добуток для нормалі
     const normal = [
-        v1[1] * v2[2] - v1[2] * v2[1],
-        v1[2] * v2[0] - v1[0] * v2[2],
-        v1[0] * v2[1] - v1[1] * v2[0]
+        du[1] * dv[2] - du[2] * dv[1],
+        du[2] * dv[0] - du[0] * dv[2],
+        du[0] * dv[1] - du[1] * dv[0],
     ];
 
-    // Нормалізація
-    const length = Math.sqrt(normal[0] * normal[0] + normal[1] * normal[1] + normal[2] * normal[2]);
-    return [normal[0] / length, normal[1] / length, normal[2] / length];
+    // Нормалізація вектора нормалі
+    const length = Math.sqrt(normal[0] ** 2 + normal[1] ** 2 + normal[2] ** 2);
+    return normal.map((n) => n / length);
 }
 
+// Обчислення нормалі трикутника
+function calculateNormalForTriangle(v1, v2, v3) {
+    const u = [v2[0] - v1[0], v2[1] - v1[1], v2[2] - v1[2]];
+    const v = [v3[0] - v1[0], v3[1] - v1[1], v3[2] - v1[2]];
+
+    const normal = [
+        u[1] * v[2] - u[2] * v[1],
+        u[2] * v[0] - u[0] * v[2],
+        u[0] * v[1] - u[1] * v[0],
+    ];
+
+    const length = Math.sqrt(normal[0] ** 2 + normal[1] ** 2 + normal[2] ** 2);
+    return normal.map((n) => n / length);
+}
 
 
 let lastTime = 0; 
